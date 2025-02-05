@@ -1,7 +1,7 @@
 streamlit==1.42.0
-opencv-python-headless
-numpy==1.21.2
-tensorflow==2.10.0
-tensorflow-addons==0.17.1
+opencv-python-headless==4.11.0.86
+numpy
+tensorflow==2.18.0
+tensorflow-addons==0.23.0
 pillow
 absl-py
