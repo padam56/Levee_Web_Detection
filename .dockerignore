@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+sandboil_best_model.h5
+seepage_best_model.h5
+runtime.txt

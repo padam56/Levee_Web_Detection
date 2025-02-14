@@ -1,0 +1,7 @@
+name: tf_env2
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - python=3.8
+prefix: /opt/conda/envs/tf_env

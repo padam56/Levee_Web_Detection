@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import time
 
-# #--- GPU Management ---
+# --- GPU Management ---
 def kill_gpu_processes():
     result = subprocess.run(['nvidia-smi', '--query-compute-apps=pid', '--format=csv,noheader'], stdout=subprocess.PIPE)
     pids = result.stdout.decode('utf-8').strip().split('\n')
@@ -81,7 +81,6 @@ def remove_nearby_seepage(sandboil_mask, seepage_mask, distance_threshold):
     and remove seepage pixels that lie within this buffer zone.
     """
     # Create a structuring element whose size is determined by the distance threshold.
-    # (Using an odd kernel size for symmetry)
     kernel_size = distance_threshold if distance_threshold % 2 == 1 else distance_threshold + 1
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
     
@@ -93,7 +92,6 @@ def remove_nearby_seepage(sandboil_mask, seepage_mask, distance_threshold):
     
     return sandboil_mask, updated_seepage_mask
 
-
 def prioritize_sandboil_over_seepage(sandboil_mask, seepage_mask):
     """
     Ensures that sandboil regions take precedence over seepage regions in overlapping areas.
@@ -103,7 +101,7 @@ def prioritize_sandboil_over_seepage(sandboil_mask, seepage_mask):
     # Resize seepage_mask to match sandboil_mask
     seepage_mask_resized = cv2.resize(seepage_mask, (sandboil_mask.shape[1], sandboil_mask.shape[0]))
 
-    # Step 2: Remove overlapping seepage pixels
+    # Remove overlapping seepage pixels
     updated_seepage_mask = np.where(combined_mask == 1, 0, seepage_mask_resized)
 
     return sandboil_mask, updated_seepage_mask
@@ -122,19 +120,16 @@ def remove_smaller_overlaps(mask1, mask2, distance_threshold):
         area1 = cv2.contourArea(cnt1)
         for cnt2 in contours2:
             area2 = cv2.contourArea(cnt2)
-
             # Calculate minimum distance between contours
             dist = cv2.pointPolygonTest(cnt1, (int(cnt2[0][0][0]), int(cnt2[0][0][1])), measureDist=True)
-
             if abs(dist) < distance_threshold:
-                # If regions overlap, remove the smaller one
+                # Remove the smaller region
                 if area1 < area2:
                     cv2.drawContours(updated_mask1, [cnt1], -1, 0, -1)
                 else:
                     cv2.drawContours(updated_mask2, [cnt2], -1, 0, -1)
 
     return updated_mask1, updated_mask2
-
 
 # Define custom objects for loading models
 custom_objects = {
@@ -295,18 +290,15 @@ def draw_bounding_boxes(frame, mask):
     """Draw bounding boxes around detected regions."""
     mask_resized = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
     contours, _ = cv2.findContours((mask_resized > 0.5).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), thickness=2)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), thickness=2)  # Green bounding box
     K.clear_session()
     return frame 
 
 # Sidebar form for sliders
 with st.sidebar.form("slider_form"):
     st.write("### Customize Image Processing")
-
-    # Sliders for image processing customization
     resolution_factor = st.slider("Adjust Image Resolution Scaling Factor", 0.1, 2.0, 1.0)
     brightness_factor = st.slider("Adjust Brightness", -100, 100, 0)
     contrast_factor = st.slider("Adjust Contrast", -100, 100, 0)
@@ -315,15 +307,12 @@ with st.sidebar.form("slider_form"):
     flip_horizontal = st.checkbox("Flip Horizontally")
     flip_vertical = st.checkbox("Flip Vertically")
     rotate_angle = st.slider("Rotate Image (Degrees)", -180, 180, step=1)
-
-    # Submit button
     submitted = st.form_submit_button("Submit")
 
 def apply_model(selected_model, image, model_type):
     """
     Apply the selected model to a preprocessed image.
     """
-    # Preprocess the image based on the model type
     processed_image = preprocess_image(
         image=image.copy(),
         model_type=model_type,
@@ -336,14 +325,11 @@ def apply_model(selected_model, image, model_type):
         flip_vertical=flip_vertical,
         rotate_angle=rotate_angle
     )
-    
-    # Predict using the selected model
     predictions = selected_model.predict(processed_image)
     predicted_mask = np.squeeze(predictions)
     K.clear_session()
     gc.collect()
     return predicted_mask
-
 
 def resolve_overlaps(sandboil_mask, seepage_mask, distance_threshold):
     """
@@ -356,32 +342,22 @@ def resolve_overlaps(sandboil_mask, seepage_mask, distance_threshold):
     """
     # Step 1: Constrained flood fill
     sandboil_mask, seepage_mask = constrained_flood_fill(sandboil_mask, seepage_mask, distance_threshold)
-
     # Step 2: Remove smaller overlaps between the two masks
     sandboil_mask, seepage_mask = remove_smaller_overlaps(sandboil_mask, seepage_mask, distance_threshold)
-
     # Step 3: Prioritize sandboil regions over seepage (eliminate overlapping seepage pixels)
     sandboil_mask, seepage_mask = prioritize_sandboil_over_seepage(sandboil_mask, seepage_mask)
-
     # Step 4: Remove seepage that is too close to sandboils by applying a dilation buffer
     sandboil_mask, seepage_mask = remove_nearby_seepage(sandboil_mask, seepage_mask, distance_threshold)
-
     return sandboil_mask, seepage_mask
-
 
 # Function to overlay mask on image with color and intensity options
 def overlay_mask_on_image(image, mask, alpha=0.5, color=(0, 255, 0)):
-    # Ensure mask is in the same size as the image
     mask_resized = cv2.resize(mask, (image.shape[1], image.shape[0]))
-    
-    # Convert grayscale mask to color if needed (e.g., binary or single-channel)
-    if len(mask_resized.shape) == 2:  # If it's a single-channel grayscale or binary mask
-        mask_colored = np.stack([mask_resized] * 3, axis=-1)  # Convert to 3-channel RGB
-        # Apply custom color based on detection type
-        mask_colored = np.where(mask_colored > 0.5, color, [0, 0, 0])  # Use selected color
+    if len(mask_resized.shape) == 2:
+        mask_colored = np.stack([mask_resized] * 3, axis=-1)
+        mask_colored = np.where(mask_colored > 0.5, color, [0, 0, 0])
     else:
         mask_colored = mask_resized
-    # Blend images using addWeighted
     overlaid_image = cv2.addWeighted(image.astype(np.uint8), 1 - alpha, mask_colored.astype(np.uint8), alpha, 0)
     K.clear_session()
     return overlaid_image
@@ -390,18 +366,15 @@ def overlay_mask_on_image(image, mask, alpha=0.5, color=(0, 255, 0)):
 overlay_intensity = st.sidebar.slider("Overlay Intensity", 0.0, 1.0, 0.5)
 
 # === Modified Helper Functions (remove per-frame session clearing) ===
-
 def process_frame(frame, input_width, input_height):
     frame_resized = cv2.resize(frame, (input_width, input_height))
-    frame_normalized = frame_resized / 255.0  # Normalize to [0, 1]
-    # Removed: K.clear_session()
+    frame_normalized = frame_resized / 255.0
     return np.expand_dims(frame_normalized, axis=0)
 
 def apply_model_to_frame(model, frame, input_width, input_height):
     processed_frame = process_frame(frame, input_width, input_height)
     predictions = model.predict(processed_frame)
     predicted_mask = np.squeeze(predictions)
-    # Removed: K.clear_session()
     return predicted_mask
 
 def overlay_mask_on_frame(frame, mask, alpha=0.5, color=(0, 255, 0)):
@@ -409,30 +382,24 @@ def overlay_mask_on_frame(frame, mask, alpha=0.5, color=(0, 255, 0)):
     mask_colored = np.stack([mask_resized] * 3, axis=-1) if len(mask_resized.shape) == 2 else mask_resized
     mask_colored = np.where(mask_colored > 0.5, color, [0, 0, 0])
     overlaid_frame = cv2.addWeighted(frame.astype(np.uint8), 1 - alpha, mask_colored.astype(np.uint8), alpha, 0)
-    # Removed: K.clear_session()
     return overlaid_frame
 
 def draw_bounding_boxes(frame, mask):
     mask_resized = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
     contours, _ = cv2.findContours((mask_resized > 0.5).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), thickness=2)  # Green bounding box
-    # Removed: K.clear_session()
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), thickness=2)
     return frame 
 
 def overlay_mask_on_image(image, mask, alpha=0.5, color=(0, 255, 0)):
     mask_resized = cv2.resize(mask, (image.shape[1], image.shape[0]))
-    
-    if len(mask_resized.shape) == 2:  # Single-channel mask
+    if len(mask_resized.shape) == 2:
         mask_colored = np.stack([mask_resized] * 3, axis=-1)
         mask_colored = np.where(mask_colored > 0.5, color, [0, 0, 0])
     else:
         mask_colored = mask_resized
-    
     overlaid_image = cv2.addWeighted(image.astype(np.uint8), 1 - alpha, mask_colored.astype(np.uint8), alpha, 0)
-    # Removed: K.clear_session()
     return overlaid_image
 
 def apply_model(selected_model, image, model_type):
@@ -448,67 +415,25 @@ def apply_model(selected_model, image, model_type):
         flip_vertical=flip_vertical,
         rotate_angle=rotate_angle
     )
-    
     predictions = selected_model.predict(processed_image)
     predicted_mask = np.squeeze(predictions)
-    # Removed: K.clear_session() and gc.collect()
     return predicted_mask
 
-
-
-
-
+# === Image Processing Section ===
 if processing_choice == "Image":
-    # Image Upload Section
     uploaded_image = st.file_uploader("Upload an Image", type=['jpg', 'png'])
     if uploaded_image is not None:
-        # Read and decode uploaded image using OpenCV
         image = cv2.imdecode(np.frombuffer(uploaded_image.read(), np.uint8), cv2.IMREAD_COLOR)
         st.image(image[..., ::-1], caption="Uploaded Image", use_container_width=True)
-
-        # Initialize combined overlay
         combined_overlay = np.zeros_like(image, dtype=np.uint8)
 
-        # Load both models if selected
-        sandboil_model = None
-        seepage_model = None
+        sandboil_model = load_sandboil_model() if sandboil_selected else None
+        seepage_model = load_seepage_model() if seepage_selected else None
 
-        if sandboil_selected:
-            st.write("Loading Sandboil model...")
-            sandboil_model = load_sandboil_model()
+        sandboil_threshold = st.sidebar.slider("Sandboil Confidence Threshold", 0.0, 1.0, 0.5, step=0.01)
+        seepage_threshold = st.sidebar.slider("Seepage Confidence Threshold", 0.0, 1.0, 0.98, step=0.01)
+        distance_threshold = st.sidebar.slider("Minimum Distance Between Sandboil and Seepage Overlays (pixels)", 5, 100, 20, step=5)
 
-        if seepage_selected:
-            st.write("Loading Seepage model...")
-            seepage_model = load_seepage_model()
-
-        # Sidebar sliders for thresholds
-        sandboil_threshold = st.sidebar.slider(
-            "Sandboil Confidence Threshold",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.5,
-            step=0.01
-        )
-
-        seepage_threshold = st.sidebar.slider(
-            "Seepage Confidence Threshold",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.98,
-            step=0.01
-        )
-
-        distance_threshold = st.sidebar.slider(
-            "Minimum Distance Between Sandboil and Seepage Overlays (pixels)",
-            min_value=5,
-            max_value=100,
-            value=20,
-            step=5
-        )
-
-        adjusted_slider_value = seepage_threshold + 1
-
-        # If both sandboil and seepage are selected
         if sandboil_selected and seepage_selected:
             st.write("Running Sandboil and Seepage Detection...")
 
@@ -520,73 +445,43 @@ if processing_choice == "Image":
             sandboil_mask = (sandboil_predictions > sandboil_threshold).astype(np.uint8)
             seepage_mask = (seepage_predictions > seepage_threshold).astype(np.uint8)
 
-            # Apply erosion to clean up the seepage mask
+            # Optionally apply morphological cleanup (e.g., erosion) if needed
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             seepage_mask = cv2.erode(seepage_mask, kernel, iterations=1)
 
-            # Resolve overlaps
+            # Resolve overlaps and ensure seepage is not too close to sandboils
             sandboil_mask, seepage_mask = resolve_overlaps(sandboil_mask, seepage_mask, distance_threshold)
-
-            # # Apply morphological operations to clean up the seepage mask
-            # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            # seepage_mask = cv2.erode(seepage_mask, kernel, iterations=1)
-
-            # Apply constrained flood fill to resolve overlaps
-            sandboil_mask, seepage_mask = constrained_flood_fill(sandboil_mask, seepage_mask, distance_threshold)
-            sandboil_mask, seepage_mask = remove_smaller_overlaps(sandboil_mask, seepage_mask, distance_threshold)
 
             # Overlay both masks on the original image
             sandboil_overlay = overlay_mask_on_image(image, sandboil_mask, alpha=overlay_intensity, color=(0, 255, 0))
             seepage_overlay = overlay_mask_on_image(image, seepage_mask, alpha=overlay_intensity, color=(255, 105, 180))
-
             combined_overlay = cv2.addWeighted(sandboil_overlay, 0.5, seepage_overlay, 0.5, 0)
 
-        # If only sandboil is selected
         elif sandboil_selected and sandboil_model is not None:
             st.write("Running Sandboil Detection...")
             sandboil_predictions = apply_model(sandboil_model, image, model_type="sandboil")
-
-            # Apply confidence threshold to filter predictions
             sandboil_mask = (sandboil_predictions > sandboil_threshold).astype(np.uint8)
-
             if detection_choice == "Bounding Box":
                 image_with_boxes = draw_bounding_boxes(image.copy(), sandboil_mask)
                 combined_overlay = cv2.addWeighted(combined_overlay, 1.0, image_with_boxes, 1.0, 0)
             elif detection_choice == "Overlay":
-                sandboil_overlay = overlay_mask_on_image(
-                    image,
-                    sandboil_mask,
-                    alpha=overlay_intensity,
-                    color=(0, 255, 0)
-                )
+                sandboil_overlay = overlay_mask_on_image(image, sandboil_mask, alpha=overlay_intensity, color=(0, 255, 0))
                 combined_overlay = cv2.addWeighted(combined_overlay, 1.0, sandboil_overlay, 1.0, 0)
 
-        # If only seepage is selected
         elif seepage_selected and seepage_model is not None:
             st.write("Running Seepage Detection...")
             seepage_predictions = apply_model(seepage_model, image, model_type="seepage")
-
-            # Apply confidence threshold and clean up mask using erosion
             seepage_mask = (seepage_predictions > seepage_threshold).astype(np.uint8)
-            
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             seepage_mask = cv2.erode(seepage_mask, kernel, iterations=1)
-
             if detection_choice == "Bounding Box":
                 image_with_boxes = draw_bounding_boxes(image.copy(), seepage_mask)
                 combined_overlay = cv2.addWeighted(combined_overlay, 1.0, image_with_boxes, 1.0, 0)
             elif detection_choice == "Overlay":
-                seepage_overlay = overlay_mask_on_image(
-                    image,
-                    seepage_mask,
-                    alpha=overlay_intensity,
-                    color=(255, 105, 180)
-                )
+                seepage_overlay = overlay_mask_on_image(image, seepage_mask, alpha=overlay_intensity, color=(255, 105, 180))
                 combined_overlay = cv2.addWeighted(combined_overlay, 1.0, seepage_overlay, 1.0, 0)
 
-        # Display the final result
         st.image(combined_overlay[..., ::-1], caption='Detection Results', use_container_width=True)
-        # --- Download Button for Processed Image ---
         ret, buffer = cv2.imencode('.png', combined_overlay)
         if ret:
             download_bytes = buffer.tobytes()
@@ -598,43 +493,27 @@ if processing_choice == "Image":
 if processing_choice == "Video":
     uploaded_video = st.file_uploader("Upload a Video", type=["mp4", "avi", "mov"])
     if uploaded_video is not None:
-        # Save the uploaded video to a temporary file
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded_video.read())
         tfile.flush()
-
-        # Open the video file using OpenCV
         cap = cv2.VideoCapture(tfile.name)
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps == 0:
             fps = 30.0
         total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
         video_duration = total_frames / fps if fps > 0 else 0
-
-        # Sidebar controls
         timeline_offset = st.sidebar.slider("Select starting video time (seconds)", min_value=0.0, max_value=video_duration, value=0.0, step=0.1)
         cap.set(cv2.CAP_PROP_POS_MSEC, timeline_offset * 1000)
         speed_multiplier = st.sidebar.slider("Playback Speed Multiplier", min_value=0.5, max_value=4.0, value=1.0, step=0.1)
         real_time_playback = st.sidebar.checkbox("Real-time playback (no artificial delay)", value=True)
-
-        # Load models if selected
         sandboil_model = load_sandboil_model() if sandboil_selected else None
         seepage_model = load_seepage_model() if seepage_selected else None
-
-        # Threshold sliders for detections
-        sandboil_threshold = st.sidebar.slider("Sandboil Confidence Threshold", 0.0, 1.0, 0.5, 0.01)
-        seepage_threshold = st.sidebar.slider("Seepage Confidence Threshold", 0.0, 1.0, 0.6, 0.01)
+        sandboil_threshold = st.sidebar.slider("Sandboil Confidence Threshold", 0.0, 1.0, 0.5, step=0.01)
+        seepage_threshold = st.sidebar.slider("Seepage Confidence Threshold", 0.0, 1.0, 0.6, step=0.01)
         distance_threshold = st.sidebar.slider("Min Distance Between Overlays (pixels)", 5, 100, 20, 5)
-
         frame_placeholder = st.empty()
         debug_placeholder = st.empty()
-
-        if real_time_playback:
-            frame_delay = 0
-        else:
-            frame_delay = 1.0 / (fps * speed_multiplier)
-
-        # List to store processed frames for later saving
+        frame_delay = 0 if real_time_playback else 1.0 / (fps * speed_multiplier)
         processed_frames = []
 
         while cap.isOpened():
@@ -648,6 +527,8 @@ if processing_choice == "Video":
                 seepage_predictions = apply_model(seepage_model, frame, model_type="seepage")
                 sandboil_mask = (sandboil_predictions > sandboil_threshold).astype(np.uint8)
                 seepage_mask = (seepage_predictions > seepage_threshold).astype(np.uint8)
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                seepage_mask = cv2.erode(seepage_mask, kernel, iterations=1)
                 sandboil_mask, seepage_mask = resolve_overlaps(sandboil_mask, seepage_mask, distance_threshold)
                 sandboil_overlay = overlay_mask_on_image(frame, sandboil_mask, alpha=overlay_intensity, color=(0, 255, 0))
                 seepage_overlay = overlay_mask_on_image(frame, seepage_mask, alpha=overlay_intensity, color=(255, 105, 180))
@@ -675,7 +556,6 @@ if processing_choice == "Video":
             else:
                 combined_overlay = frame
 
-            # Optional debug output
             debug_text = ""
             if sandboil_selected and sandboil_model is not None:
                 max_sandboil = np.max(sandboil_predictions)
@@ -684,22 +564,16 @@ if processing_choice == "Video":
                 max_seepage = np.max(seepage_predictions)
                 debug_text += f"Max Seepage probability: {max_seepage:.3f}\n"
             debug_placeholder.text(debug_text)
-
-            # Append the processed frame for later saving
             processed_frames.append(combined_overlay.copy())
-
             if frame_delay > 0:
                 elapsed_time = time.time() - start_time
                 sleep_time = frame_delay - elapsed_time
                 if sleep_time > 0:
                     time.sleep(sleep_time)
-
             frame_placeholder.image(combined_overlay[..., ::-1], channels="RGB", use_container_width=True)
 
         cap.release()
         os.remove(tfile.name)
-
-        # --- Save Processed Video to File and Provide Download Button ---
         if processed_frames:
             height, width, _ = processed_frames[0].shape
             out_path = "processed_video.mp4"
