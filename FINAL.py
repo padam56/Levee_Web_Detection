@@ -12,9 +12,13 @@ import tempfile
 from streamlit_drawable_canvas import st_canvas
 import pandas as pd
 import json
+from streamlit_drawable_canvas import st_canvas
+import pandas as pd
+import time
 
 
-# Import custom modules (assuming they exist)
+
+# Import custom modules
 from metrics import mcc_loss, mcc_metric, dice_coef, dice_loss, f1, tversky, tversky_loss, focal_tversky_loss, bce_dice_loss_new, jaccard, bce_dice_loss
 from SandBoilNet import PCALayer, spatial_pooling_block, attention_block, initial_conv2d_bn, conv2d_bn, iterLBlock, decoder_block
 
@@ -97,7 +101,7 @@ def get_auto_threshold(predictions, method='otsu'):
 def preprocess_image(image, model_type, resolution_factor=1.0, brightness_factor=0, contrast_factor=0,
                      blur_amount=1, edge_detection=False, flip_horizontal=False, flip_vertical=False,
                      rotate_angle=0):
-    dims = {'sandboil': (512, 512), 'seepage': (256, 256)}  # Add other model dimensions
+    dims = {'sandboil': (512, 512), 'seepage': (256, 256)}
     input_width, input_height = dims.get(model_type, (512, 512))
     
     image_resized = cv2.resize(image, (input_width, input_height))
@@ -325,13 +329,6 @@ if selected_types:
 if "save_success" not in st.session_state:
     st.session_state.save_success = False
 
-
-
-# —— Imports at top of file ——
-from streamlit_drawable_canvas import st_canvas
-import pandas as pd
-import time
-
 # —— Session-state init ——
 if "canvas_counter" not in st.session_state:
     st.session_state.canvas_counter = 0
@@ -442,10 +439,8 @@ if processing_choice == "Image":
                         with open(path, "w") as f:
                             json.dump(data, f, indent=2)
 
-                        # set our flag and keep annotations intact for review
                         st.session_state.save_success = True
 
-                # **After** that Save button, add this once per run to show the saved output:
                 if st.session_state.save_success:
                     st.success(f"✅ Saved {len(st.session_state.annotations)} annotation(s)!")
                     # show and offer download
@@ -462,7 +457,6 @@ if processing_choice == "Image":
                     except Exception as e:
                         st.error(f"Could not read back JSON: {e}")
 
-                    # Optionally let the user clear the success message when they're done:
                     if st.button("Done Reviewing Saved Annotations"):
                         st.session_state.save_success = False
 
